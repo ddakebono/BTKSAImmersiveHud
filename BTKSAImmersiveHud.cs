@@ -21,7 +21,7 @@ namespace BTKSAImmersiveHud
         public const string Name = "BTKSAImmersiveHud";
         public const string Author = "DDAkebono#0001";
         public const string Company = "BTK-Development";
-        public const string Version = "1.1.0";
+        public const string Version = "1.1.1";
         public const string DownloadLink = "https://github.com/ddakebono/BTKSAImmersiveHud/releases";
     }
 
@@ -100,7 +100,6 @@ namespace BTKSAImmersiveHud
                 MelonLogger.Log("Found HudContent gameobject");
                 HudEvent behavior = hudContent.AddComponent<HudEvent>();
                 behavior.onEnableListeners.Add(OnMenuEnable);
-                OnModSettingsApplied();
             }
         }
 
@@ -161,6 +160,7 @@ namespace BTKSAImmersiveHud
                 //World join start custom hud element scan
                 instance.scannedCustomHud = true;
                 instance.postWorldJoinChildScan();
+                instance.OnModSettingsApplied();
             }
         }
 
