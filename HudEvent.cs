@@ -11,21 +11,45 @@ namespace BTKSAImmersiveHud
 {
     public class HudEvent : MonoBehaviour
     {
-        public List<CallBack> onEnableListeners = new List<CallBack>();
+        public bool enableUntilClear = false;
+        public bool vrchatBrokenNotification = false;
 
-        public delegate void CallBack();
+        public List<CallBack> OnEnableListeners = new List<CallBack>();
+        public List<DisableCallback> OnDisableListeners = new List<DisableCallback>();
+
+        public delegate void CallBack(bool enableUntilClear);
+        public delegate void DisableCallback();
+
+        private float lastEnableTime = 0;
 
         public HudEvent(IntPtr obj0) : base(obj0)
         {
 
         }
 
-        public void OnEnable()
+        public void OnDisable()
         {
-            foreach(CallBack listener in onEnableListeners)
+            foreach(DisableCallback listener in OnDisableListeners)
             {
                 listener();
             }
+        }
+
+        public void OnEnable()
+        {
+            if (Time.time > (lastEnableTime + .2f) || vrchatBrokenNotification)
+            {
+                
+                foreach (CallBack listener in OnEnableListeners)
+                {
+                    if (!vrchatBrokenNotification)
+                        listener(enableUntilClear);
+                    else
+                        listener(false);
+                }
+            }
+
+            lastEnableTime = Time.time;
         }
     }
 }

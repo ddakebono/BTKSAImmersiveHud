@@ -21,7 +21,7 @@ namespace BTKSAImmersiveHud
         public const string Name = "BTKSAImmersiveHud";
         public const string Author = "DDAkebono#0001";
         public const string Company = "BTK-Development";
-        public const string Version = "1.1.1";
+        public const string Version = "1.2.0";
         public const string DownloadLink = "https://github.com/ddakebono/BTKSAImmersiveHud/releases";
     }
 
@@ -32,14 +32,16 @@ namespace BTKSAImmersiveHud
         public static string settingsCategory = "BTKSAImmersiveHud";
         public static string hudEnable = "hudEnable";
         public static string hudTimeout = "hudTimeout";
+        public static string hudStayOnUntilClear = "hudStayTillClear";
 
         public HarmonyInstance harmony;
 
         public static List<string> recentUnhideEvents = new List<string>();
+        public static List<HudEvent> hudEventComponents = new List<HudEvent>();
 
-        private string[] defaultsInNotificationDot =
+        //We need to handle these differently cause VRChat sucks
+        private string[] VRChatNotificationPatch =
         {
-            "NotificationDot",
             "VoteKickDot",
             "FriendRequestDot",
             "InviteDot",
@@ -47,11 +49,17 @@ namespace BTKSAImmersiveHud
         };
 
         private List<MonitoredObject> customHudObjects = new List<MonitoredObject>();
-        private GameObject hudContent;
         private float hudCurrentTimeout = 0f;
         private bool shownHud = false;
         private bool enableImmersiveHud = false;
         private bool scannedCustomHud = false;
+        private bool notificationIsActive = false;
+
+        //Cached Objects
+        private GameObject HudContent;
+        private GameObject GestureParent;
+        private GameObject NotificationParent;
+        private GameObject AFKParent;
 
         public override void VRChat_OnUiManagerInit()
         {
@@ -69,6 +77,7 @@ namespace BTKSAImmersiveHud
 
             MelonPrefs.RegisterCategory(settingsCategory, "Immersive Hud");
             MelonPrefs.RegisterBool(settingsCategory, hudEnable, true, "Immersive Hud Enable");
+            MelonPrefs.RegisterBool(settingsCategory, hudStayOnUntilClear, false, "Keep Hud Visible Until Notification Cleared");
             MelonPrefs.RegisterFloat(settingsCategory, hudTimeout, 10f, "Hud Appear Duration");
 
             //Register our MonoBehavior to let us use OnEnable
@@ -77,8 +86,6 @@ namespace BTKSAImmersiveHud
             harmony = HarmonyInstance.Create("BTKStandaloneIH");
             //Mute/Unmute Hook
             harmony.Patch(typeof(DefaultTalkController).GetMethod("Method_Public_Static_Void_Boolean_0", BindingFlags.Public | BindingFlags.Static), null, new HarmonyMethod(typeof(BTKSAImmersiveHud).GetMethod("OnHudUpdateEvent", BindingFlags.Public | BindingFlags.Static)));
-            //GestureLock Hook
-            harmony.Patch(typeof(HandGestureController).GetMethod("Method_Public_Static_Void_Boolean_0", BindingFlags.Public | BindingFlags.Static), null, new HarmonyMethod(typeof(BTKSAImmersiveHud).GetMethod("OnHudUpdateEvent", BindingFlags.Public | BindingFlags.Static)));
             //World join hook to detect for first world join
             foreach (MethodInfo method in typeof(RoomManagerBase).GetMethods(BindingFlags.Public | BindingFlags.Static))
             {
@@ -86,51 +93,41 @@ namespace BTKSAImmersiveHud
                     harmony.Patch(method, null, new HarmonyMethod(typeof(BTKSAImmersiveHud).GetMethod("OnWorldJoin", BindingFlags.Static | BindingFlags.Public)));
             }
 
-            IEnumerable<MethodInfo> addNotificationMethods = typeof(NotificationManager).GetMethods(BindingFlags.Public | BindingFlags.Instance).Where(
-                m => m.Name.StartsWith("Method_Public_Void_Notification_Enum")
-                     && m.GetParameters().Length == 2
-                     && m.GetParameters()[0].ParameterType
-                     == typeof(Notification));
-            foreach (MethodInfo methodInfo in addNotificationMethods)
-                harmony.Patch(methodInfo, null, new HarmonyMethod(typeof(BTKSAImmersiveHud).GetMethod("OnNotification", BindingFlags.Public | BindingFlags.Static)));
-
-            hudContent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud");
-            if (hudContent != null)
-            {
-                MelonLogger.Log("Found HudContent gameobject");
-                HudEvent behavior = hudContent.AddComponent<HudEvent>();
-                behavior.onEnableListeners.Add(OnMenuEnable);
-            }
+            HudContent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud");
+            GestureParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud/GestureToggleParent");
+            NotificationParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud/NotificationDotParent");
+            AFKParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud/AFK");
         }
 
         public override void OnModSettingsApplied()
         {
             enableImmersiveHud = MelonPrefs.GetBool(settingsCategory, hudEnable);
-            shownHud = !enableImmersiveHud;
-            hudContent.SetActive(!enableImmersiveHud);
+            if (enableImmersiveHud)
+                hideHud();
             hudCurrentTimeout = 0;
+
+            foreach (HudEvent hudEvent in hudEventComponents)
+            {
+                hudEvent.enableUntilClear = MelonPrefs.GetBool(settingsCategory, hudStayOnUntilClear);
+                hudEvent.OnDisableListeners.Clear();
+                if (!hudEvent.vrchatBrokenNotification && MelonPrefs.GetBool(settingsCategory, hudStayOnUntilClear))
+                    hudEvent.OnDisableListeners.Add(OnTrackedGameObjectDisable);
+            }
         }
 
         public override void OnUpdate()
         {
-            foreach(MonitoredObject hudItem in customHudObjects)
-            {
-                if (hudItem.CheckState())
-                    showHud();
-            }
-
             if (enableImmersiveHud)
             {
-                if (!shownHud && hudCurrentTimeout > 0)
+                foreach (MonitoredObject hudItem in customHudObjects)
                 {
-                    shownHud = true;
-                    hudContent.SetActive(true);
+                    if (hudItem.CheckState())
+                        showHud();
                 }
 
-                if (shownHud && hudCurrentTimeout <= 0)
+                if (shownHud && hudCurrentTimeout <= 0 && !notificationIsActive)
                 {
-                    shownHud = false;
-                    hudContent.SetActive(false);
+                    hideHud();
                 }
                 else
                 {
@@ -166,40 +163,86 @@ namespace BTKSAImmersiveHud
 
         public void postWorldJoinChildScan()
         {
-            MelonLogger.Log("Searching for custom hud elements...");
+            MelonLogger.Log("Searching for hud elements...");
 
-            GameObject modParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud/NotificationDotParent");
+            int child1 = IterateAndAttactToChildren(NotificationParent);
+            int child2 = IterateAndAttactToChildren(AFKParent);
+            int child3 = IterateAndAttactToChildren(GestureParent);
 
-            for (int i = 0; i < modParent.transform.childCount; i++)
-            {
-                //Scan objects for non standards to attach
-                Transform child = modParent.transform.GetChild(i);
-                if (!defaultsInNotificationDot.Any(x => x.Equals(child.name)))
-                {
-                    MelonLogger.Log($"Detected Mod Hud Item {child.name}");
-                    MonitoredObject newHudItem = new MonitoredObject(child.gameObject, child.gameObject.activeSelf);
+            MelonLogger.Log($"Discovered {child1} in NotificationParent, {child2} in AFKParent, and {child3} in GestureParent.");
 
-                    //Patch to monitor the correct component for JoinNotifier
-                    if (child.name.Equals("NotifyDot-join") || child.name.Equals("NotifyDot-leave"))
-                    {
-                        newHudItem.trackedComponent = child.GetComponent<Image>();
-                    }
-
-                    customHudObjects.Add(newHudItem);
-                }
-            }
+            OnModSettingsApplied();
         }
 
         public void showHud()
         {
-            if(MelonPrefs.GetBool(settingsCategory, hudEnable))
-                hudCurrentTimeout = MelonPrefs.GetFloat(settingsCategory, hudTimeout);
+            hudCurrentTimeout = MelonPrefs.GetFloat(settingsCategory, hudTimeout);
+            if (!shownHud)
+            {
+                HudContent.transform.localScale = new Vector3(1, 1, 1);
+                shownHud = true;
+            }
         }
 
-        private void OnMenuEnable()
+        public void hideHud()
         {
-            if (!shownHud && enableImmersiveHud)
-                hudContent.SetActive(false);
+            HudContent.transform.localScale = new Vector3(0, 0, 0);
+            shownHud = false;
+        }
+
+        private int IterateAndAttactToChildren(GameObject parent)
+        {
+            int childCount = 0;
+
+            for (int i = 0; i < parent.transform.childCount; i++)
+            {
+                //Scan objects for non standards to attach
+                Transform child = parent.transform.GetChild(i);
+                childCount++;
+
+                //Patch to monitor the correct component for JoinNotifier
+                if (child.name.Equals("NotifyDot-join") || child.name.Equals("NotifyDot-leave"))
+                {
+                    MonitoredObject newHudItem = new MonitoredObject(child.gameObject, child.gameObject.activeSelf);
+                    newHudItem.trackedComponent = child.GetComponent<Image>();
+                    customHudObjects.Add(newHudItem);
+                }
+                else
+                {
+                    HudEvent hudEvent = child.gameObject.AddComponent<HudEvent>();
+                    hudEvent.OnEnableListeners.Add(OnTrackedGameObjectEnable);
+
+                    hudEventComponents.Add(hudEvent);
+
+                    if (VRChatNotificationPatch.Any(x => x.Equals(child.name)))
+                    {
+                        //Make sure we handle the scuffed VRChat Enable/Disable spam bullshit
+                        hudEvent.vrchatBrokenNotification = true;
+                    }
+
+                    if (MelonPrefs.GetBool(settingsCategory, hudStayOnUntilClear))
+                    {
+                        hudEvent.enableUntilClear = true;
+                        if(!hudEvent.vrchatBrokenNotification)
+                            hudEvent.OnDisableListeners.Add(OnTrackedGameObjectDisable);
+                    }
+                }
+            }
+
+            return childCount;
+        }
+
+        private void OnTrackedGameObjectEnable(bool enableUntilClear)
+        {
+            showHud();
+            notificationIsActive = enableUntilClear;
+        }
+
+        private void OnTrackedGameObjectDisable()
+        {
+            //Reset hud timer before clearing notificationIsActive
+            showHud();
+            notificationIsActive = false;
         }
 
     }
@@ -222,17 +265,9 @@ namespace BTKSAImmersiveHud
         {
             if (trackedComponent != null)
             {
-                if(trackedComponent.enabled != lastKnownState)
+                if (trackedComponent.enabled != lastKnownState)
                 {
                     lastKnownState = trackedComponent.enabled;
-                    return true;
-                }
-            } 
-            else
-            {
-                if(HudItem.activeSelf != lastKnownState)
-                {
-                    lastKnownState = HudItem.activeSelf;
                     return true;
                 }
             }
