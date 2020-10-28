@@ -21,7 +21,7 @@ namespace BTKSAImmersiveHud
         public const string Name = "BTKSAImmersiveHud";
         public const string Author = "DDAkebono#0001";
         public const string Company = "BTK-Development";
-        public const string Version = "1.2.1";
+        public const string Version = "1.2.2";
         public const string DownloadLink = "https://github.com/ddakebono/BTKSAImmersiveHud/releases";
     }
 
@@ -82,8 +82,14 @@ namespace BTKSAImmersiveHud
             ClassInjector.RegisterTypeInIl2Cpp<HudEvent>();
 
             harmony = HarmonyInstance.Create("BTKStandaloneIH");
+
             //Mute/Unmute Hook
-            harmony.Patch(typeof(DefaultTalkController).GetMethod("Method_Public_Static_Void_Boolean_0", BindingFlags.Public | BindingFlags.Static), null, new HarmonyMethod(typeof(BTKSAImmersiveHud).GetMethod("OnHudUpdateEvent", BindingFlags.Public | BindingFlags.Static)));
+            foreach (MethodInfo method in typeof(DefaultTalkController).GetMethods(BindingFlags.Public | BindingFlags.Static))
+            {
+                if (method.Name.Contains("Method_Public_Static_Void_Boolean_") && !method.Name.Contains("PDM"))
+                    harmony.Patch(method, null, new HarmonyMethod(typeof(BTKSAImmersiveHud).GetMethod("OnHudUpdateEvent", BindingFlags.Public | BindingFlags.Static)));
+            }
+
             //World join hook to detect for first world join
             foreach (MethodInfo method in typeof(RoomManager).GetMethods(BindingFlags.Public | BindingFlags.Static))
             {
