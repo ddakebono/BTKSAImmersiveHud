@@ -21,7 +21,7 @@ namespace BTKSAImmersiveHud
         public const string Name = "BTKSAImmersiveHud";
         public const string Author = "DDAkebono#0001";
         public const string Company = "BTK-Development";
-        public const string Version = "1.2.0";
+        public const string Version = "1.2.1";
         public const string DownloadLink = "https://github.com/ddakebono/BTKSAImmersiveHud/releases";
     }
 
@@ -36,7 +36,6 @@ namespace BTKSAImmersiveHud
 
         public HarmonyInstance harmony;
 
-        public static List<string> recentUnhideEvents = new List<string>();
         public static List<HudEvent> hudEventComponents = new List<HudEvent>();
 
         //We need to handle these differently cause VRChat sucks
@@ -67,11 +66,10 @@ namespace BTKSAImmersiveHud
 
             instance = this;
 
-            if (Directory.Exists("BTKCompanion"))
+            if (MelonHandler.Mods.Any(x => x.Info.Name.Equals("BTKCompanionLoader", StringComparison.OrdinalIgnoreCase)))
             {
-                MelonLogger.Log("Woah, hold on a sec, it seems you might be running BTKCompanion, if this is true ImmversiveHud is built into that, and you should not be using this!");
-                MelonLogger.Log("If you are not currently using BTKCompanion please remove the BTKCompanion folder from your VRChat installation!");
-                MelonLogger.LogError("ImmersiveHud has not started up! (BTKCompanion Exists)");
+                MelonLogger.Log("Hold on a sec! Looks like you've got BTKCompanion installed, this mod is built in and not needed!");
+                MelonLogger.LogError("BTKSAImmersiveHud has not started up! (BTKCompanion Running)");
                 return;
             }
 
@@ -87,7 +85,7 @@ namespace BTKSAImmersiveHud
             //Mute/Unmute Hook
             harmony.Patch(typeof(DefaultTalkController).GetMethod("Method_Public_Static_Void_Boolean_0", BindingFlags.Public | BindingFlags.Static), null, new HarmonyMethod(typeof(BTKSAImmersiveHud).GetMethod("OnHudUpdateEvent", BindingFlags.Public | BindingFlags.Static)));
             //World join hook to detect for first world join
-            foreach (MethodInfo method in typeof(RoomManagerBase).GetMethods(BindingFlags.Public | BindingFlags.Static))
+            foreach (MethodInfo method in typeof(RoomManager).GetMethods(BindingFlags.Public | BindingFlags.Static))
             {
                 if (method.Name.Contains("Method_Public_Static_Boolean_ApiWorld_ApiWorldInstance_"))
                     harmony.Patch(method, null, new HarmonyMethod(typeof(BTKSAImmersiveHud).GetMethod("OnWorldJoin", BindingFlags.Static | BindingFlags.Public)));
@@ -97,6 +95,11 @@ namespace BTKSAImmersiveHud
             GestureParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud/GestureToggleParent");
             NotificationParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud/NotificationDotParent");
             AFKParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud/AFK");
+        }
+
+        public static void OnHudUpdateEvent()
+        {
+            instance.showHud();
         }
 
         public override void OnModSettingsApplied()
@@ -133,20 +136,6 @@ namespace BTKSAImmersiveHud
                 {
                     hudCurrentTimeout -= Time.deltaTime;
                 }
-            }
-        }
-
-        public static void OnHudUpdateEvent()
-        {
-            instance.showHud();
-        }
-
-        public static void OnNotification(Notification __0)
-        {
-            if (!recentUnhideEvents.Contains(__0.id))
-            {
-                recentUnhideEvents.Add(__0.id);
-                instance.showHud();
             }
         }
 
