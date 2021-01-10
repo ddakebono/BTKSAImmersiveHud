@@ -21,7 +21,7 @@ namespace BTKSAImmersiveHud
         public const string Name = "BTKSAImmersiveHud";
         public const string Author = "DDAkebono#0001";
         public const string Company = "BTK-Development";
-        public const string Version = "1.2.2";
+        public const string Version = "1.3.0";
         public const string DownloadLink = "https://github.com/ddakebono/BTKSAImmersiveHud/releases";
     }
 
@@ -53,6 +53,7 @@ namespace BTKSAImmersiveHud
         private bool enableImmersiveHud = false;
         private bool scannedCustomHud = false;
         private bool notificationIsActive = false;
+        private bool keepOn = false;
 
         //Cached Objects
         private GameObject HudContent;
@@ -134,6 +135,17 @@ namespace BTKSAImmersiveHud
                         showHud();
                 }
 
+                if (VRCUiManager.prop_VRCUiManager_0.Method_Public_Boolean_0() && !keepOn)
+                {
+                    showHud();
+                    keepOn = true;
+                }
+
+                if(!VRCUiManager.prop_VRCUiManager_0.Method_Public_Boolean_0() && keepOn)
+                {
+                    keepOn = false;
+                }
+
                 if (shownHud && hudCurrentTimeout <= 0 && !notificationIsActive)
                 {
                     hideHud();
@@ -160,8 +172,11 @@ namespace BTKSAImmersiveHud
         {
             MelonLogger.Log("Searching for hud elements...");
 
+            Log("Scanning NotificationParent", true);
             int child1 = IterateAndAttactToChildren(NotificationParent);
+            Log("Scanning AFKParent", true);
             int child2 = IterateAndAttactToChildren(AFKParent);
+            Log("Scanning GestureParent", true);
             int child3 = IterateAndAttactToChildren(GestureParent);
 
             MelonLogger.Log($"Discovered {child1} in NotificationParent, {child2} in AFKParent, and {child3} in GestureParent.");
@@ -181,8 +196,11 @@ namespace BTKSAImmersiveHud
 
         public void hideHud()
         {
-            HudContent.transform.localScale = new Vector3(0, 0, 0);
-            shownHud = false;
+            if (!keepOn)
+            {
+                HudContent.transform.localScale = new Vector3(0, 0, 0);
+                shownHud = false;
+            }
         }
 
         private int IterateAndAttactToChildren(GameObject parent)
@@ -195,12 +213,26 @@ namespace BTKSAImmersiveHud
                 Transform child = parent.transform.GetChild(i);
                 childCount++;
 
+                Log($"Child: {child.name}", true);
+
                 //Patch to monitor the correct component for JoinNotifier
                 if (child.name.Equals("NotifyDot-join") || child.name.Equals("NotifyDot-leave"))
                 {
                     MonitoredObject newHudItem = new MonitoredObject(child.gameObject, child.gameObject.activeSelf);
                     newHudItem.trackedComponent = child.GetComponent<Image>();
                     customHudObjects.Add(newHudItem);
+                }
+                else if (child.name.Equals("NotifyDot-DownloadStatusProgress"))
+                {
+                    //Patch to keep hud active while WorldPreloader is downloading with it's UI element active
+                    HudEvent hudEvent = child.gameObject.AddComponent<HudEvent>();
+                    hudEvent.OnEnableListeners.Add(OnTrackedGameObjectEnable);
+
+                    hudEventComponents.Add(hudEvent);
+
+                    //Always set enableUntilClear
+                    hudEvent.enableUntilClear = true;
+                    hudEvent.OnDisableListeners.Add(OnTrackedGameObjectDisable);
                 }
                 else
                 {
@@ -238,6 +270,14 @@ namespace BTKSAImmersiveHud
             //Reset hud timer before clearing notificationIsActive
             showHud();
             notificationIsActive = false;
+        }
+
+        public static void Log(string log, bool dbg = false)
+        {
+            if (!Imports.IsDebugMode() && dbg)
+                return;
+
+            MelonLogger.Log(log);
         }
 
     }
