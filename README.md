@@ -1,10 +1,12 @@
 # BTKSAImmersiveHud
 Immersive Hud mod for VRChat, only displays the hud when notifications come in or a state changes (Mic mute/unmute, Gesture lock).
 
+The mod also now supports enabling UI if the VRCUiManager Hud Text fires, or when WorldPreloader is displaying it's UI element.
+
 You can configure the duration that the hud stays visible, and disable the entire mod, from [UIExpanionKit](https://github.com/knah/VRCMods)
 
 ## Install/Usage
-Install [MelonLoader](https://github.com/HerpDerpinstine/MelonLoader) version 0.2.6 or higher, it does require 0.2.6 as it has migrated to the new MelonPrefs and MelonLogger classes.
+Install [MelonLoader](https://github.com/HerpDerpinstine/MelonLoader) version 0.2.7.x or higher.
 
 Download the latest release from [Releases](https://github.com/ddakebono/BTKSAGestureMod/releases) and place in your VRChat\Mods folder.
 
