@@ -1,15 +1,9 @@
 ﻿using Harmony;
-using Il2CppSystem.Threading;
 using MelonLoader;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
-using Transmtn.DTO.Notifications;
-using UnhollowerBaseLib.Runtime;
 using UnhollowerRuntimeLib;
 using UnityEngine;
 using UnityEngine.UI;
@@ -21,7 +15,7 @@ namespace BTKSAImmersiveHud
         public const string Name = "BTKSAImmersiveHud";
         public const string Author = "DDAkebono#0001";
         public const string Company = "BTK-Development";
-        public const string Version = "1.3.0";
+        public const string Version = "1.3.1";
         public const string DownloadLink = "https://github.com/ddakebono/BTKSAImmersiveHud/releases";
     }
 
@@ -37,15 +31,6 @@ namespace BTKSAImmersiveHud
         public HarmonyInstance harmony;
 
         public static List<HudEvent> hudEventComponents = new List<HudEvent>();
-
-        //We need to handle these differently cause VRChat sucks
-        private string[] VRChatNotificationPatch =
-        {
-            "VoteKickDot",
-            "FriendRequestDot",
-            "InviteDot",
-            "InviteRequestDot"
-        };
 
         private List<MonitoredObject> customHudObjects = new List<MonitoredObject>();
         private float hudCurrentTimeout = 0f;
@@ -63,21 +48,21 @@ namespace BTKSAImmersiveHud
 
         public override void VRChat_OnUiManagerInit()
         {
-            MelonLogger.Log("BTK Standalone: Immersive Hud - Starting Up");
+            MelonLogger.Msg("BTK Standalone: Immersive Hud - Starting Up");
 
             instance = this;
 
             if (MelonHandler.Mods.Any(x => x.Info.Name.Equals("BTKCompanionLoader", StringComparison.OrdinalIgnoreCase)))
             {
-                MelonLogger.Log("Hold on a sec! Looks like you've got BTKCompanion installed, this mod is built in and not needed!");
-                MelonLogger.LogError("BTKSAImmersiveHud has not started up! (BTKCompanion Running)");
+                MelonLogger.Msg("Hold on a sec! Looks like you've got BTKCompanion installed, this mod is built in and not needed!");
+                MelonLogger.Error("BTKSAImmersiveHud has not started up! (BTKCompanion Running)");
                 return;
             }
 
-            MelonPrefs.RegisterCategory(settingsCategory, "Immersive Hud");
-            MelonPrefs.RegisterBool(settingsCategory, hudEnable, true, "Immersive Hud Enable");
-            MelonPrefs.RegisterBool(settingsCategory, hudStayOnUntilClear, false, "Keep Hud Visible Until Notification Cleared");
-            MelonPrefs.RegisterFloat(settingsCategory, hudTimeout, 10f, "Hud Appear Duration");
+            MelonPreferences.CreateCategory(settingsCategory, "Immersive Hud");
+            MelonPreferences.CreateEntry<bool>(settingsCategory, hudEnable, true, "Immersive Hud Enable");
+            MelonPreferences.CreateEntry<bool>(settingsCategory, hudStayOnUntilClear, false, "Keep Hud Visible Until Notification Cleared");
+            MelonPreferences.CreateEntry<float>(settingsCategory, hudTimeout, 10f, "Hud Appear Duration");
 
             //Register our MonoBehavior to let us use OnEnable
             ClassInjector.RegisterTypeInIl2Cpp<HudEvent>();
@@ -109,18 +94,18 @@ namespace BTKSAImmersiveHud
             instance.showHud();
         }
 
-        public override void OnModSettingsApplied()
+        public override void OnPreferencesSaved()
         {
-            enableImmersiveHud = MelonPrefs.GetBool(settingsCategory, hudEnable);
+            enableImmersiveHud = MelonPreferences.GetEntryValue<bool>(settingsCategory, hudEnable);
             if (enableImmersiveHud)
                 hideHud();
             hudCurrentTimeout = 0;
 
             foreach (HudEvent hudEvent in hudEventComponents)
             {
-                hudEvent.enableUntilClear = MelonPrefs.GetBool(settingsCategory, hudStayOnUntilClear);
+                hudEvent.enableUntilClear = MelonPreferences.GetEntryValue<bool>(settingsCategory, hudStayOnUntilClear);
                 hudEvent.OnDisableListeners.Clear();
-                if (!hudEvent.vrchatBrokenNotification && MelonPrefs.GetBool(settingsCategory, hudStayOnUntilClear))
+                if (MelonPreferences.GetEntryValue<bool>(settingsCategory, hudStayOnUntilClear))
                     hudEvent.OnDisableListeners.Add(OnTrackedGameObjectDisable);
             }
         }
@@ -164,13 +149,13 @@ namespace BTKSAImmersiveHud
                 //World join start custom hud element scan
                 instance.scannedCustomHud = true;
                 instance.postWorldJoinChildScan();
-                instance.OnModSettingsApplied();
+                instance.OnPreferencesSaved();
             }
         }
 
         public void postWorldJoinChildScan()
         {
-            MelonLogger.Log("Searching for hud elements...");
+            MelonLogger.Msg("Searching for hud elements...");
 
             Log("Scanning NotificationParent", true);
             int child1 = IterateAndAttactToChildren(NotificationParent);
@@ -179,14 +164,14 @@ namespace BTKSAImmersiveHud
             Log("Scanning GestureParent", true);
             int child3 = IterateAndAttactToChildren(GestureParent);
 
-            MelonLogger.Log($"Discovered {child1} in NotificationParent, {child2} in AFKParent, and {child3} in GestureParent.");
+            MelonLogger.Msg($"Discovered {child1} in NotificationParent, {child2} in AFKParent, and {child3} in GestureParent.");
 
-            OnModSettingsApplied();
+            OnPreferencesSaved();
         }
 
         public void showHud()
         {
-            hudCurrentTimeout = MelonPrefs.GetFloat(settingsCategory, hudTimeout);
+            hudCurrentTimeout = MelonPreferences.GetEntryValue<float>(settingsCategory, hudTimeout);
             if (!shownHud)
             {
                 HudContent.transform.localScale = new Vector3(1, 1, 1);
@@ -241,17 +226,10 @@ namespace BTKSAImmersiveHud
 
                     hudEventComponents.Add(hudEvent);
 
-                    if (VRChatNotificationPatch.Any(x => x.Equals(child.name)))
-                    {
-                        //Make sure we handle the scuffed VRChat Enable/Disable spam bullshit
-                        hudEvent.vrchatBrokenNotification = true;
-                    }
-
-                    if (MelonPrefs.GetBool(settingsCategory, hudStayOnUntilClear))
+                    if (MelonPreferences.GetEntryValue<bool>(settingsCategory, hudStayOnUntilClear))
                     {
                         hudEvent.enableUntilClear = true;
-                        if(!hudEvent.vrchatBrokenNotification)
-                            hudEvent.OnDisableListeners.Add(OnTrackedGameObjectDisable);
+                        hudEvent.OnDisableListeners.Add(OnTrackedGameObjectDisable);
                     }
                 }
             }
@@ -274,10 +252,10 @@ namespace BTKSAImmersiveHud
 
         public static void Log(string log, bool dbg = false)
         {
-            if (!Imports.IsDebugMode() && dbg)
+            if (!MelonDebug.IsEnabled() && dbg)
                 return;
 
-            MelonLogger.Log(log);
+            MelonLogger.Msg(log);
         }
 
     }
