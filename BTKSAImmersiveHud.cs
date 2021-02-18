@@ -15,7 +15,7 @@ namespace BTKSAImmersiveHud
         public const string Name = "BTKSAImmersiveHud";
         public const string Author = "DDAkebono#0001";
         public const string Company = "BTK-Development";
-        public const string Version = "1.3.2";
+        public const string Version = "1.3.3";
         public const string DownloadLink = "https://github.com/ddakebono/BTKSAImmersiveHud/releases";
     }
 
@@ -165,6 +165,8 @@ namespace BTKSAImmersiveHud
             int child3 = IterateAndAttactToChildren(GestureParent);
 
             MelonLogger.Msg($"Discovered {child1} in NotificationParent, {child2} in AFKParent, and {child3} in GestureParent.");
+
+            VRCUiManager.prop_VRCUiManager_0.field_Public_Text_0.color = new Color(1, 1, 1, 0);
 
             OnPreferencesSaved();
         }
