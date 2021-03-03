@@ -15,7 +15,7 @@ namespace BTKSAImmersiveHud
         public const string Name = "BTKSAImmersiveHud";
         public const string Author = "DDAkebono#0001";
         public const string Company = "BTK-Development";
-        public const string Version = "1.3.3";
+        public const string Version = "1.3.4";
         public const string DownloadLink = "https://github.com/ddakebono/BTKSAImmersiveHud/releases";
     }
 
@@ -114,19 +114,20 @@ namespace BTKSAImmersiveHud
         {
             if (enableImmersiveHud)
             {
+
                 foreach (MonitoredObject hudItem in customHudObjects)
                 {
                     if (hudItem.CheckState())
                         showHud();
                 }
 
-                if (VRCUiManager.prop_VRCUiManager_0.field_Public_Text_0.color.a > 0.02f && !keepOn)
+                if (VRCUiManager.prop_VRCUiManager_0.field_Private_Single_0 > 0f && !keepOn)
                 {
                     showHud();
                     keepOn = true;
                 }
 
-                if (VRCUiManager.prop_VRCUiManager_0.field_Public_Text_0.color.a <= 0.02f && keepOn)
+                if (VRCUiManager.prop_VRCUiManager_0.field_Private_Single_0 <= 0f && keepOn)
                 {
                     keepOn = false;
                 }
@@ -166,14 +167,13 @@ namespace BTKSAImmersiveHud
 
             MelonLogger.Msg($"Discovered {child1} in NotificationParent, {child2} in AFKParent, and {child3} in GestureParent.");
 
-            VRCUiManager.prop_VRCUiManager_0.field_Public_Text_0.color = new Color(1, 1, 1, 0);
-
             OnPreferencesSaved();
         }
 
         public void showHud()
         {
             hudCurrentTimeout = MelonPreferences.GetEntryValue<float>(settingsCategory, hudTimeout);
+
             if (!shownHud)
             {
                 HudContent.transform.localScale = new Vector3(1, 1, 1);
