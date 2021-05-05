@@ -15,7 +15,7 @@ namespace BTKSAImmersiveHud
         public const string Name = "BTKSAImmersiveHud";
         public const string Author = "DDAkebono#0001";
         public const string Company = "BTK-Development";
-        public const string Version = "1.3.4";
+        public const string Version = "1.3.5";
         public const string DownloadLink = "https://github.com/ddakebono/BTKSAImmersiveHud/releases";
     }
 
@@ -39,6 +39,7 @@ namespace BTKSAImmersiveHud
         private bool scannedCustomHud = false;
         private bool notificationIsActive = false;
         private bool keepOn = false;
+        int scenesLoaded = 0;
 
         //Cached Objects
         private GameObject HudContent;
@@ -46,7 +47,17 @@ namespace BTKSAImmersiveHud
         private GameObject NotificationParent;
         private GameObject AFKParent;
 
-        public override void VRChat_OnUiManagerInit()
+        public override void OnSceneWasLoaded(int buildIndex, string sceneName)
+        {
+            if (scenesLoaded <= 2)
+            {
+                scenesLoaded++;
+                if (scenesLoaded == 2)
+                    UiManagerInit();
+            }
+        }
+
+        public void UiManagerInit()
         {
             MelonLogger.Msg("BTK Standalone: Immersive Hud - Starting Up");
 
