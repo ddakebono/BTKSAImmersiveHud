@@ -15,7 +15,7 @@ namespace BTKSAImmersiveHud
         public const string Name = "BTKSAImmersiveHud";
         public const string Author = "DDAkebono#0001";
         public const string Company = "BTK-Development";
-        public const string Version = "1.3.5";
+        public const string Version = "1.3.6";
         public const string DownloadLink = "https://github.com/ddakebono/BTKSAImmersiveHud/releases";
     }
 
@@ -80,19 +80,14 @@ namespace BTKSAImmersiveHud
 
             harmony = HarmonyInstance.Create("BTKStandaloneIH");
 
-            //Mute/Unmute Hook
-            foreach (MethodInfo method in typeof(DefaultTalkController).GetMethods(BindingFlags.Public | BindingFlags.Static))
-            {
-                if (method.Name.Contains("Method_Public_Static_Void_Boolean_") && !method.Name.Contains("PDM"))
-                    harmony.Patch(method, null, new HarmonyMethod(typeof(BTKSAImmersiveHud).GetMethod("OnHudUpdateEvent", BindingFlags.Public | BindingFlags.Static)));
-            }
-
             //World join hook to detect for first world join
             foreach (MethodInfo method in typeof(RoomManager).GetMethods(BindingFlags.Public | BindingFlags.Static))
             {
                 if (method.Name.Contains("Method_Public_Static_Boolean_ApiWorld_ApiWorldInstance_"))
                     harmony.Patch(method, null, new HarmonyMethod(typeof(BTKSAImmersiveHud).GetMethod("OnWorldJoin", BindingFlags.Static | BindingFlags.Public)));
             }
+
+            DefaultTalkController.Method_Public_Static_add_Void_Action_0(new Action(() => OnHudUpdateEvent()));
 
             HudContent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud");
             GestureParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud/GestureToggleParent");
