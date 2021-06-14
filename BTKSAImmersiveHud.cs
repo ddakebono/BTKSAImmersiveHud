@@ -1,12 +1,13 @@
-﻿using Harmony;
-using MelonLoader;
+﻿using MelonLoader;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using HarmonyLib;
 using UnhollowerRuntimeLib;
 using UnityEngine;
 using UnityEngine.UI;
+using VRC.Core;
 
 namespace BTKSAImmersiveHud
 {
@@ -15,53 +16,52 @@ namespace BTKSAImmersiveHud
         public const string Name = "BTKSAImmersiveHud";
         public const string Author = "DDAkebono#0001";
         public const string Company = "BTK-Development";
-        public const string Version = "1.3.6";
+        public const string Version = "1.3.7";
         public const string DownloadLink = "https://github.com/ddakebono/BTKSAImmersiveHud/releases";
     }
 
     public class BTKSAImmersiveHud : MelonMod
     {
-        public static BTKSAImmersiveHud instance;
+        public static BTKSAImmersiveHud Instance;
+        
+        public bool ScannedCustomHud = false;
+        public bool IsImmersiveHudReady = false;
 
-        public static string settingsCategory = "BTKSAImmersiveHud";
-        public static string hudEnable = "hudEnable";
-        public static string hudTimeout = "hudTimeout";
-        public static string hudStayOnUntilClear = "hudStayTillClear";
+        private const string SettingsCategory = "BTKSAImmersiveHud";
+        private const string HUDEnable = "hudEnable";
+        private const string HUDTimeout = "hudTimeout";
+        private const string HUDStayOnUntilClear = "hudStayTillClear";
 
-        public HarmonyInstance harmony;
+        private static readonly List<HudEvent> HUDEventComponents = new List<HudEvent>();
 
-        public static List<HudEvent> hudEventComponents = new List<HudEvent>();
-
-        private List<MonitoredObject> customHudObjects = new List<MonitoredObject>();
+        private readonly List<MonitoredObject> customHudObjects = new List<MonitoredObject>();
         private float hudCurrentTimeout = 0f;
         private bool shownHud = false;
         private bool enableImmersiveHud = false;
-        private bool scannedCustomHud = false;
+
         private bool notificationIsActive = false;
         private bool keepOn = false;
-        int scenesLoaded = 0;
+        private int scenesLoaded = 0;
 
         //Cached Objects
-        private GameObject HudContent;
-        private GameObject GestureParent;
-        private GameObject NotificationParent;
-        private GameObject AFKParent;
+        private GameObject hudContent;
+        private GameObject gestureParent;
+        private GameObject notificationParent;
+        private GameObject afkParent;
 
         public override void OnSceneWasLoaded(int buildIndex, string sceneName)
         {
-            if (scenesLoaded <= 2)
-            {
-                scenesLoaded++;
-                if (scenesLoaded == 2)
-                    UiManagerInit();
-            }
+            if (scenesLoaded > 2) return;
+            scenesLoaded++;
+            if (scenesLoaded == 2)
+                UiManagerInit();
         }
 
-        public void UiManagerInit()
+        private void UiManagerInit()
         {
             MelonLogger.Msg("BTK Standalone: Immersive Hud - Starting Up");
 
-            instance = this;
+            Instance = this;
 
             if (MelonHandler.Mods.Any(x => x.Info.Name.Equals("BTKCompanionLoader", StringComparison.OrdinalIgnoreCase)))
             {
@@ -70,133 +70,113 @@ namespace BTKSAImmersiveHud
                 return;
             }
 
-            MelonPreferences.CreateCategory(settingsCategory, "Immersive Hud");
-            MelonPreferences.CreateEntry<bool>(settingsCategory, hudEnable, true, "Immersive Hud Enable");
-            MelonPreferences.CreateEntry<bool>(settingsCategory, hudStayOnUntilClear, false, "Keep Hud Visible Until Notification Cleared");
-            MelonPreferences.CreateEntry<float>(settingsCategory, hudTimeout, 10f, "Hud Appear Duration");
+            MelonPreferences.CreateCategory(SettingsCategory, "Immersive Hud");
+            MelonPreferences.CreateEntry(SettingsCategory, HUDEnable, true, "Immersive Hud Enable");
+            MelonPreferences.CreateEntry(SettingsCategory, HUDStayOnUntilClear, false, "Keep Hud Visible Until Notification Cleared");
+            MelonPreferences.CreateEntry(SettingsCategory, HUDTimeout, 10f, "Hud Appear Duration");
 
             //Register our MonoBehavior to let us use OnEnable
             ClassInjector.RegisterTypeInIl2Cpp<HudEvent>();
 
-            harmony = HarmonyInstance.Create("BTKStandaloneIH");
+            DefaultTalkController.Method_Public_Static_add_Void_Action_0(new Action(OnHudUpdateEvent));
 
-            //World join hook to detect for first world join
-            foreach (MethodInfo method in typeof(RoomManager).GetMethods(BindingFlags.Public | BindingFlags.Static))
-            {
-                if (method.Name.Contains("Method_Public_Static_Boolean_ApiWorld_ApiWorldInstance_"))
-                    harmony.Patch(method, null, new HarmonyMethod(typeof(BTKSAImmersiveHud).GetMethod("OnWorldJoin", BindingFlags.Static | BindingFlags.Public)));
-            }
+            hudContent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud");
+            gestureParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud/GestureToggleParent");
+            notificationParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud/NotificationDotParent");
+            afkParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud/AFK");
 
-            DefaultTalkController.Method_Public_Static_add_Void_Action_0(new Action(() => OnHudUpdateEvent()));
-
-            HudContent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud");
-            GestureParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud/GestureToggleParent");
-            NotificationParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud/NotificationDotParent");
-            AFKParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud/AFK");
+            //Ensure the patch doesn't trigger a scan before we're ready
+            IsImmersiveHudReady = true;
         }
 
-        public static void OnHudUpdateEvent()
+        private static void OnHudUpdateEvent()
         {
-            instance.showHud();
+            Instance.ShowHud();
         }
 
         public override void OnPreferencesSaved()
         {
-            enableImmersiveHud = MelonPreferences.GetEntryValue<bool>(settingsCategory, hudEnable);
+            enableImmersiveHud = MelonPreferences.GetEntryValue<bool>(SettingsCategory, HUDEnable);
             if (enableImmersiveHud)
-                hideHud();
+                HideHud();
             hudCurrentTimeout = 0;
 
-            foreach (HudEvent hudEvent in hudEventComponents)
+            foreach (var hudEvent in HUDEventComponents)
             {
-                hudEvent.enableUntilClear = MelonPreferences.GetEntryValue<bool>(settingsCategory, hudStayOnUntilClear);
+                hudEvent.enableUntilClear = MelonPreferences.GetEntryValue<bool>(SettingsCategory, HUDStayOnUntilClear);
                 hudEvent.OnDisableListeners.Clear();
-                if (MelonPreferences.GetEntryValue<bool>(settingsCategory, hudStayOnUntilClear))
+                if (MelonPreferences.GetEntryValue<bool>(SettingsCategory, HUDStayOnUntilClear))
                     hudEvent.OnDisableListeners.Add(OnTrackedGameObjectDisable);
             }
         }
 
         public override void OnUpdate()
         {
-            if (enableImmersiveHud)
+            if (!enableImmersiveHud) return;
+            
+            foreach (var hudItem in customHudObjects.Where(hudItem => hudItem.CheckState()))
             {
+                ShowHud();
+            }
 
-                foreach (MonitoredObject hudItem in customHudObjects)
-                {
-                    if (hudItem.CheckState())
-                        showHud();
-                }
+            if (VRCUiManager.prop_VRCUiManager_0.field_Private_Single_0 > 0f && !keepOn)
+            {
+                ShowHud();
+                keepOn = true;
+            }
 
-                if (VRCUiManager.prop_VRCUiManager_0.field_Private_Single_0 > 0f && !keepOn)
-                {
-                    showHud();
-                    keepOn = true;
-                }
+            if (VRCUiManager.prop_VRCUiManager_0.field_Private_Single_0 <= 0f && keepOn)
+            {
+                keepOn = false;
+            }
 
-                if (VRCUiManager.prop_VRCUiManager_0.field_Private_Single_0 <= 0f && keepOn)
-                {
-                    keepOn = false;
-                }
-
-                if (shownHud && hudCurrentTimeout <= 0 && !notificationIsActive)
-                {
-                    hideHud();
-                }
-                else
-                {
-                    hudCurrentTimeout -= Time.deltaTime;
-                }
+            if (shownHud && hudCurrentTimeout <= 0 && !notificationIsActive)
+            {
+                HideHud();
+            }
+            else
+            {
+                hudCurrentTimeout -= Time.deltaTime;
             }
         }
 
-        public static void OnWorldJoin()
-        {
-            if (!instance.scannedCustomHud)
-            {
-                //World join start custom hud element scan
-                instance.scannedCustomHud = true;
-                instance.postWorldJoinChildScan();
-                instance.OnPreferencesSaved();
-            }
-        }
-
-        public void postWorldJoinChildScan()
+        public void PostWorldJoinChildScan()
         {
             MelonLogger.Msg("Searching for hud elements...");
 
             Log("Scanning NotificationParent", true);
-            int child1 = IterateAndAttactToChildren(NotificationParent);
+            int child1 = IterateAndAttachToChildren(notificationParent);
             Log("Scanning AFKParent", true);
-            int child2 = IterateAndAttactToChildren(AFKParent);
+            int child2 = IterateAndAttachToChildren(afkParent);
             Log("Scanning GestureParent", true);
-            int child3 = IterateAndAttactToChildren(GestureParent);
+            int child3 = IterateAndAttachToChildren(gestureParent);
 
             MelonLogger.Msg($"Discovered {child1} in NotificationParent, {child2} in AFKParent, and {child3} in GestureParent.");
 
             OnPreferencesSaved();
         }
 
-        public void showHud()
+        private void ShowHud()
         {
-            hudCurrentTimeout = MelonPreferences.GetEntryValue<float>(settingsCategory, hudTimeout);
+            hudCurrentTimeout = MelonPreferences.GetEntryValue<float>(SettingsCategory, HUDTimeout);
 
             if (!shownHud)
             {
-                HudContent.transform.localScale = new Vector3(1, 1, 1);
+                hudContent.transform.localScale = new Vector3(1, 1, 1);
                 shownHud = true;
             }
         }
 
-        public void hideHud()
+        private void HideHud()
         {
             if (!keepOn)
             {
-                HudContent.transform.localScale = new Vector3(0, 0, 0);
+                hudContent.transform.localScale = new Vector3(0, 0, 0);
                 shownHud = false;
             }
         }
 
-        private int IterateAndAttactToChildren(GameObject parent)
+        private int IterateAndAttachToChildren(GameObject parent)
         {
             int childCount = 0;
 
@@ -211,8 +191,9 @@ namespace BTKSAImmersiveHud
                 //Patch to monitor the correct component for JoinNotifier
                 if (child.name.Equals("NotifyDot-join") || child.name.Equals("NotifyDot-leave"))
                 {
-                    MonitoredObject newHudItem = new MonitoredObject(child.gameObject, child.gameObject.activeSelf);
-                    newHudItem.trackedComponent = child.GetComponent<Image>();
+                    var gameObject = child.gameObject;
+                    MonitoredObject newHudItem = new MonitoredObject(gameObject, gameObject.activeSelf);
+                    newHudItem.TrackedComponent = child.GetComponent<Image>();
                     customHudObjects.Add(newHudItem);
                 }
                 else if (child.name.Equals("NotifyDot-DownloadStatusProgress"))
@@ -221,7 +202,7 @@ namespace BTKSAImmersiveHud
                     HudEvent hudEvent = child.gameObject.AddComponent<HudEvent>();
                     hudEvent.OnEnableListeners.Add(OnTrackedGameObjectEnable);
 
-                    hudEventComponents.Add(hudEvent);
+                    HUDEventComponents.Add(hudEvent);
 
                     //Always set enableUntilClear
                     hudEvent.enableUntilClear = true;
@@ -232,9 +213,9 @@ namespace BTKSAImmersiveHud
                     HudEvent hudEvent = child.gameObject.AddComponent<HudEvent>();
                     hudEvent.OnEnableListeners.Add(OnTrackedGameObjectEnable);
 
-                    hudEventComponents.Add(hudEvent);
+                    HUDEventComponents.Add(hudEvent);
 
-                    if (MelonPreferences.GetEntryValue<bool>(settingsCategory, hudStayOnUntilClear))
+                    if (MelonPreferences.GetEntryValue<bool>(SettingsCategory, HUDStayOnUntilClear))
                     {
                         hudEvent.enableUntilClear = true;
                         hudEvent.OnDisableListeners.Add(OnTrackedGameObjectDisable);
@@ -247,18 +228,18 @@ namespace BTKSAImmersiveHud
 
         private void OnTrackedGameObjectEnable(bool enableUntilClear)
         {
-            showHud();
+            ShowHud();
             notificationIsActive = enableUntilClear;
         }
 
         private void OnTrackedGameObjectDisable()
         {
             //Reset hud timer before clearing notificationIsActive
-            showHud();
+            ShowHud();
             notificationIsActive = false;
         }
 
-        public static void Log(string log, bool dbg = false)
+        private static void Log(string log, bool dbg = false)
         {
             if (!MelonDebug.IsEnabled() && dbg)
                 return;
@@ -267,33 +248,48 @@ namespace BTKSAImmersiveHud
         }
 
     }
+    
+    [HarmonyPatch]
+    class RoomManagerPatches
+    {
+        static IEnumerable<MethodBase> TargetMethods()
+        {
+            return typeof(RoomManager).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(x => x.Name.Contains("Method_Public_Static_Boolean_ApiWorld_ApiWorldInstance_") && !x.Name.Contains("PDM")).Cast<MethodBase>();
+        }
+
+        static void Postfix()
+        {
+            if (!BTKSAImmersiveHud.Instance.ScannedCustomHud && BTKSAImmersiveHud.Instance.IsImmersiveHudReady)
+            {
+                //World join start custom hud element scan
+                BTKSAImmersiveHud.Instance.ScannedCustomHud = true;
+                BTKSAImmersiveHud.Instance.PostWorldJoinChildScan();
+                BTKSAImmersiveHud.Instance.OnPreferencesSaved();
+            }
+        }
+    }
 
     //Monitored GameObject object
     class MonitoredObject
     {
-        public GameObject HudItem;
-        public bool lastKnownState;
+        private GameObject hudItem;
+        private bool lastKnownState;
         //Patch to monitor JoinNotifier
-        public Image trackedComponent;
+        public Image TrackedComponent;
 
         public MonitoredObject(GameObject go, bool lastKnownState)
         {
-            this.HudItem = go;
+            this.hudItem = go;
             this.lastKnownState = lastKnownState;
         }
 
         public bool CheckState()
         {
-            if (trackedComponent != null)
-            {
-                if (trackedComponent.enabled != lastKnownState)
-                {
-                    lastKnownState = trackedComponent.enabled;
-                    return true;
-                }
-            }
+            if (TrackedComponent == null) return false;
+            if (TrackedComponent.enabled == lastKnownState) return false;
+            lastKnownState = TrackedComponent.enabled;
+            return true;
 
-            return false;
         }
     }
 }
