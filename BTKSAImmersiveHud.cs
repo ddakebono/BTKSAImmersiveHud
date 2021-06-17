@@ -7,7 +7,6 @@ using HarmonyLib;
 using UnhollowerRuntimeLib;
 using UnityEngine;
 using UnityEngine.UI;
-using VRC.Core;
 
 namespace BTKSAImmersiveHud
 {
@@ -16,7 +15,7 @@ namespace BTKSAImmersiveHud
         public const string Name = "BTKSAImmersiveHud";
         public const string Author = "DDAkebono#0001";
         public const string Company = "BTK-Development";
-        public const string Version = "1.3.7";
+        public const string Version = "1.3.8";
         public const string DownloadLink = "https://github.com/ddakebono/BTKSAImmersiveHud/releases";
     }
 
@@ -25,7 +24,6 @@ namespace BTKSAImmersiveHud
         public static BTKSAImmersiveHud Instance;
         
         public bool ScannedCustomHud = false;
-        public bool IsImmersiveHudReady = false;
 
         private const string SettingsCategory = "BTKSAImmersiveHud";
         private const string HUDEnable = "hudEnable";
@@ -74,6 +72,9 @@ namespace BTKSAImmersiveHud
             MelonPreferences.CreateEntry(SettingsCategory, HUDEnable, true, "Immersive Hud Enable");
             MelonPreferences.CreateEntry(SettingsCategory, HUDStayOnUntilClear, false, "Keep Hud Visible Until Notification Cleared");
             MelonPreferences.CreateEntry(SettingsCategory, HUDTimeout, 10f, "Hud Appear Duration");
+            
+            //Apply patches
+            applyPatches(typeof(RoomManagerPatches));
 
             //Register our MonoBehavior to let us use OnEnable
             ClassInjector.RegisterTypeInIl2Cpp<HudEvent>();
@@ -84,9 +85,19 @@ namespace BTKSAImmersiveHud
             gestureParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud/GestureToggleParent");
             notificationParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud/NotificationDotParent");
             afkParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud/AFK");
-
-            //Ensure the patch doesn't trigger a scan before we're ready
-            IsImmersiveHudReady = true;
+        }
+        
+        private void applyPatches(Type type)
+        {
+            try
+            {
+                HarmonyLib.Harmony.CreateAndPatchAll(type, "BTKHarmonyInstance");
+            }
+            catch(Exception e)
+            {
+                Log($"Failed while patching {type.Name}!");
+                MelonLogger.Error(e);
+            }
         }
 
         private static void OnHudUpdateEvent()
@@ -259,7 +270,7 @@ namespace BTKSAImmersiveHud
 
         static void Postfix()
         {
-            if (!BTKSAImmersiveHud.Instance.ScannedCustomHud && BTKSAImmersiveHud.Instance.IsImmersiveHudReady)
+            if (!BTKSAImmersiveHud.Instance.ScannedCustomHud)
             {
                 //World join start custom hud element scan
                 BTKSAImmersiveHud.Instance.ScannedCustomHud = true;
