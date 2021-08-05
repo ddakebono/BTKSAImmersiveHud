@@ -15,7 +15,7 @@ namespace BTKSAImmersiveHud
         public const string Name = "BTKSAImmersiveHud";
         public const string Author = "DDAkebono#0001";
         public const string Company = "BTK-Development";
-        public const string Version = "1.3.8";
+        public const string Version = "1.3.9";
         public const string DownloadLink = "https://github.com/ddakebono/BTKSAImmersiveHud/releases";
     }
 
@@ -130,13 +130,13 @@ namespace BTKSAImmersiveHud
                 ShowHud();
             }
 
-            if (VRCUiManager.prop_VRCUiManager_0.field_Private_Single_0 > 0f && !keepOn)
+            if (VRCUiManager.field_Private_Static_VRCUiManager_0.field_Private_Single_0 > 0f && !keepOn)
             {
                 ShowHud();
                 keepOn = true;
             }
 
-            if (VRCUiManager.prop_VRCUiManager_0.field_Private_Single_0 <= 0f && keepOn)
+            if (VRCUiManager.field_Private_Static_VRCUiManager_0.field_Private_Single_0 <= 0f && keepOn)
             {
                 keepOn = false;
             }
