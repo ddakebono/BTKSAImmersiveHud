@@ -15,7 +15,7 @@ namespace BTKSAImmersiveHud
         public const string Name = "BTKSAImmersiveHud";
         public const string Author = "DDAkebono#0001";
         public const string Company = "BTK-Development";
-        public const string Version = "1.3.9";
+        public const string Version = "1.3.10";
         public const string DownloadLink = "https://github.com/ddakebono/BTKSAImmersiveHud/releases";
     }
 
@@ -72,19 +72,19 @@ namespace BTKSAImmersiveHud
             MelonPreferences.CreateEntry(SettingsCategory, HUDEnable, true, "Immersive Hud Enable");
             MelonPreferences.CreateEntry(SettingsCategory, HUDStayOnUntilClear, false, "Keep Hud Visible Until Notification Cleared");
             MelonPreferences.CreateEntry(SettingsCategory, HUDTimeout, 10f, "Hud Appear Duration");
-            
+
             //Apply patches
             applyPatches(typeof(RoomManagerPatches));
 
             //Register our MonoBehavior to let us use OnEnable
             ClassInjector.RegisterTypeInIl2Cpp<HudEvent>();
 
-            DefaultTalkController.Method_Public_Static_add_Void_Action_0(new Action(OnHudUpdateEvent));
+            USpeaker.field_Private_Static_Action_0 += new Action(OnHudUpdateEvent);
 
-            hudContent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud");
-            gestureParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud/GestureToggleParent");
-            notificationParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud/NotificationDotParent");
-            afkParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent/Hud/AFK");
+            hudContent = GameObject.Find("/UserInterface/UnscaledUI/HudContent_Old/Hud");
+            gestureParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent_Old/Hud/GestureToggleParent");
+            notificationParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent_Old/Hud/NotificationDotParent");
+            afkParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent_Old/Hud/AFK");
         }
         
         private void applyPatches(Type type)
