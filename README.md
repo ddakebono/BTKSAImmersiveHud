@@ -1,3 +1,6 @@
+# THIS REPO IS NO LONGER SUPPORTED, VRCHAT'S DECISION TO ADOPT EASY ANTI CHEAT HAS KILLED ANY DESIRE TO CONTINUE.
+# UNLESS THIS DECISION IS REVERSED THIS REPO WILL REMAIN ARCHIVED.
+
 # BTKSAImmersiveHud
 Immersive Hud mod for VRChat, only displays the hud when notifications come in or a state changes (Mic mute/unmute, Gesture lock).
 
