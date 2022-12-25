@@ -1,4 +1,5 @@
-﻿using MelonLoader;
+﻿using System;
+using MelonLoader;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -11,7 +12,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("")]
 [assembly: AssemblyProduct("BTKSAImmersiveHud")]
-[assembly: AssemblyCopyright("Copyright ©  2020")]
+[assembly: AssemblyCopyright("Copyright ©  2022")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
@@ -33,8 +34,10 @@ using System.Runtime.InteropServices;
 // You can specify all the values or you can default the Build and Revision Numbers
 // by using the '*' as shown below:
 // [assembly: AssemblyVersion("1.0.*")]
-[assembly: AssemblyVersion("1.3.10.0")]
-[assembly: AssemblyFileVersion("1.3.10.0")]
+[assembly: AssemblyVersion("2.0.0.0")]
+[assembly: AssemblyFileVersion("2.0.0.0")]
 [assembly: MelonInfo(typeof(BTKSAImmersiveHud.BTKSAImmersiveHud), BTKSAImmersiveHud.BuildInfo.Name, BTKSAImmersiveHud.BuildInfo.Version, BTKSAImmersiveHud.BuildInfo.Author, BTKSAImmersiveHud.BuildInfo.DownloadLink)]
-[assembly: MelonGame("VRChat", "VRChat")]
+[assembly: MelonGame("Alpha Blend Interactive", "ChilloutVR")]
+[assembly: MelonColor(ConsoleColor.DarkMagenta)]
+[assembly: MelonAuthorColor(ConsoleColor.DarkMagenta)]
 [assembly: HarmonyDontPatchAll]

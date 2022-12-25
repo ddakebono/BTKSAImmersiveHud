@@ -1,12 +1,19 @@
 ﻿using MelonLoader;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
+using ABI_RC.Core.InteractionSystem;
+using ABI_RC.Core.Savior;
+using ABI_RC.Core.UI;
+using BTKSAImmersiveHud.Config;
+using BTKUILib;
+using BTKUILib.UIObjects;
+using BTKUILib.UIObjects.Components;
 using HarmonyLib;
-using UnhollowerRuntimeLib;
+using Semver;
+using System.Reflection;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace BTKSAImmersiveHud
 {
@@ -15,292 +22,383 @@ namespace BTKSAImmersiveHud
         public const string Name = "BTKSAImmersiveHud";
         public const string Author = "DDAkebono#0001";
         public const string Company = "BTK-Development";
-        public const string Version = "1.3.10";
+        public const string Version = "2.0.0";
         public const string DownloadLink = "https://github.com/ddakebono/BTKSAImmersiveHud/releases";
     }
 
     public class BTKSAImmersiveHud : MelonMod
     {
-        public static BTKSAImmersiveHud Instance;
-        
-        public bool ScannedCustomHud = false;
+        internal static BTKSAImmersiveHud Instance;
+        internal static MelonLogger.Instance Logger;
 
-        private const string SettingsCategory = "BTKSAImmersiveHud";
-        private const string HUDEnable = "hudEnable";
-        private const string HUDTimeout = "hudTimeout";
-        private const string HUDStayOnUntilClear = "hudStayTillClear";
+        internal static readonly List<IBTKBaseConfig> BTKConfigs = new();
 
-        private static readonly List<HudEvent> HUDEventComponents = new List<HudEvent>();
+        internal static BTKBoolConfig IHEnable = new(nameof(BTKSAImmersiveHud), "Enable Immersive Hud", "Enables/Disables Immersive Hud's functionality", false, null, false);
+        private BTKBoolConfig _stayOnUntilClear = new(nameof(BTKSAImmersiveHud), "Stay On Until Clear", "Keeps the hud visible until all notifications are cleared", false, null, false);
+        private BTKFloatConfig _timeout = new(nameof(BTKSAImmersiveHud), "Hud Timeout", "How long before the hud is hidden again (In seconds)", 10f, 0f, 60f, null, false);
 
-        private readonly List<MonitoredObject> customHudObjects = new List<MonitoredObject>();
-        private float hudCurrentTimeout = 0f;
-        private bool shownHud = false;
-        private bool enableImmersiveHud = false;
+        private DateTime _lastEnabled = DateTime.Now;
+        private bool _qmReady;
+        private bool _hidden;
+        private bool _stayVisible;
+        private bool _stayVisibleNotifier;
+        private bool _lastNotifierState;
+        private object _ihCoroutineToken;
+        private float _messageTimer;
+        private bool _quitting;
+        private bool _hasSetupUI;
 
-        private bool notificationIsActive = false;
-        private bool keepOn = false;
-        private int scenesLoaded = 0;
-
-        //Cached Objects
-        private GameObject hudContent;
-        private GameObject gestureParent;
-        private GameObject notificationParent;
-        private GameObject afkParent;
-
-        public override void OnSceneWasLoaded(int buildIndex, string sceneName)
-        {
-            if (scenesLoaded > 2) return;
-            scenesLoaded++;
-            if (scenesLoaded == 2)
-                UiManagerInit();
-        }
-
-        private void UiManagerInit()
+        public override void OnInitializeMelon()
         {
             MelonLogger.Msg("BTK Standalone: Immersive Hud - Starting Up");
 
-            Instance = this;
+            Logger = LoggerInstance;
 
-            if (MelonHandler.Mods.Any(x => x.Info.Name.Equals("BTKCompanionLoader", StringComparison.OrdinalIgnoreCase)))
+            Logger.Msg("BTK Standalone: Self Portrait - Starting Up");
+
+            if (RegisteredMelons.Any(x => x.Info.Name.Equals("BTKCompanionLoader", StringComparison.OrdinalIgnoreCase)))
             {
-                MelonLogger.Msg("Hold on a sec! Looks like you've got BTKCompanion installed, this mod is built in and not needed!");
-                MelonLogger.Error("BTKSAImmersiveHud has not started up! (BTKCompanion Running)");
+                Logger.Msg("Hold on a sec! Looks like you've got BTKCompanion installed, this mod is built in and not needed!");
+                Logger.Error("BTKSAImmersiveHud has not started up! (BTKCompanion Running)");
                 return;
             }
 
-            MelonPreferences.CreateCategory(SettingsCategory, "Immersive Hud");
-            MelonPreferences.CreateEntry(SettingsCategory, HUDEnable, true, "Immersive Hud Enable");
-            MelonPreferences.CreateEntry(SettingsCategory, HUDStayOnUntilClear, false, "Keep Hud Visible Until Notification Cleared");
-            MelonPreferences.CreateEntry(SettingsCategory, HUDTimeout, 10f, "Hud Appear Duration");
+            if (!RegisteredMelons.Any(x => x.Info.Name.Equals("BTKUILib") && x.Info.SemanticVersion != null && x.Info.SemanticVersion.CompareTo(new SemVersion(1)) >= 0))
+            {
+                Logger.Error("BTKUILib was not detected or it outdated! BTKCompanion cannot function without it!");
+                Logger.Error("Please download an updated copy for BTKUILib!");
+                return;
+            }
+
+            Instance = this;
 
             //Apply patches
-            applyPatches(typeof(RoomManagerPatches));
-
-            //Register our MonoBehavior to let us use OnEnable
-            ClassInjector.RegisterTypeInIl2Cpp<HudEvent>();
-
-            USpeaker.field_Private_Static_Action_0 += new Action(OnHudUpdateEvent);
-
-            hudContent = GameObject.Find("/UserInterface/UnscaledUI/HudContent_Old/Hud");
-            gestureParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent_Old/Hud/GestureToggleParent");
-            notificationParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent_Old/Hud/NotificationDotParent");
-            afkParent = GameObject.Find("/UserInterface/UnscaledUI/HudContent_Old/Hud/AFK");
-        }
-        
-        private void applyPatches(Type type)
-        {
-            try
-            {
-                HarmonyLib.Harmony.CreateAndPatchAll(type, "BTKHarmonyInstance");
-            }
-            catch(Exception e)
-            {
-                Log($"Failed while patching {type.Name}!");
-                MelonLogger.Error(e);
-            }
-        }
-
-        private static void OnHudUpdateEvent()
-        {
-            Instance.ShowHud();
-        }
-
-        public override void OnPreferencesSaved()
-        {
-            enableImmersiveHud = MelonPreferences.GetEntryValue<bool>(SettingsCategory, HUDEnable);
-            if (enableImmersiveHud)
-                HideHud();
-            hudCurrentTimeout = 0;
-
-            foreach (var hudEvent in HUDEventComponents)
-            {
-                hudEvent.enableUntilClear = MelonPreferences.GetEntryValue<bool>(SettingsCategory, HUDStayOnUntilClear);
-                hudEvent.OnDisableListeners.Clear();
-                if (MelonPreferences.GetEntryValue<bool>(SettingsCategory, HUDStayOnUntilClear))
-                    hudEvent.OnDisableListeners.Add(OnTrackedGameObjectDisable);
-            }
-        }
-
-        public override void OnUpdate()
-        {
-            if (!enableImmersiveHud) return;
+            ApplyPatches(typeof(HudPatches));
             
-            foreach (var hudItem in customHudObjects.Where(hudItem => hudItem.CheckState()))
+            HudPatches.OnHudReady += OnQMMarkAsReady;
+
+            IHEnable.OnConfigUpdated += o =>
             {
+                if(o)
+                    _ihCoroutineToken = MelonCoroutines.Start(ImmersiveHudCoroutine());
+                else
+                    MelonCoroutines.Stop(_ihCoroutineToken);
+                
                 ShowHud();
-            }
-
-            if (VRCUiManager.field_Private_Static_VRCUiManager_0.field_Private_Single_0 > 0f && !keepOn)
-            {
-                ShowHud();
-                keepOn = true;
-            }
-
-            if (VRCUiManager.field_Private_Static_VRCUiManager_0.field_Private_Single_0 <= 0f && keepOn)
-            {
-                keepOn = false;
-            }
-
-            if (shownHud && hudCurrentTimeout <= 0 && !notificationIsActive)
-            {
-                HideHud();
-            }
-            else
-            {
-                hudCurrentTimeout -= Time.deltaTime;
-            }
+            };
+            
+            QuickMenuAPI.OnMenuRegenerate += LateStartup;
         }
 
-        public void PostWorldJoinChildScan()
+        public override void OnApplicationQuit()
         {
-            MelonLogger.Msg("Searching for hud elements...");
+            _quitting = true;
+        }
 
-            Log("Scanning NotificationParent", true);
-            int child1 = IterateAndAttachToChildren(notificationParent);
-            Log("Scanning AFKParent", true);
-            int child2 = IterateAndAttachToChildren(afkParent);
-            Log("Scanning GestureParent", true);
-            int child3 = IterateAndAttachToChildren(gestureParent);
+        public void HudUpdated()
+        {
+            ShowHud();
+        }
 
-            MelonLogger.Msg($"Discovered {child1} in NotificationParent, {child2} in AFKParent, and {child3} in GestureParent.");
+        public void HudUpdatedMessage(float duration, bool resetTimer = false)
+        {
+            if (resetTimer)
+                _messageTimer = 0f;
+            
+            _messageTimer += duration;
+            ShowHud();
+        }
 
-            OnPreferencesSaved();
+        public void HudUpdatedPropSpawn(bool state)
+        {
+            ShowHud();
+            _stayVisible = state;
+        }
+
+        public void HudUpdatedNotifier(bool state)
+        {
+            if(_lastNotifierState == state) return;
+
+            ShowHud();
+            
+            _stayVisibleNotifier = state;
+            _lastNotifierState = state;
         }
 
         private void ShowHud()
         {
-            hudCurrentTimeout = MelonPreferences.GetEntryValue<float>(SettingsCategory, HUDTimeout);
+            _lastEnabled = DateTime.Now;
+            CohtmlHud.Instance.RestoreHud();
+            _hidden = false;
+        }
+        
+        private void OnQMMarkAsReady()
+        {
+            _qmReady = true;
+        }
 
-            if (!shownHud)
+        private void ApplyPatches(Type type)
+        {
+            try
             {
-                hudContent.transform.localScale = new Vector3(1, 1, 1);
-                shownHud = true;
+                HarmonyInstance.PatchAll(type);
+            }
+            catch (Exception e)
+            {
+                Logger.Error($"Failed while patching {type.Name}!");
+                Logger.Error(e);
             }
         }
-
-        private void HideHud()
+        
+        private IEnumerator ImmersiveHudCoroutine()
         {
-            if (!keepOn)
+            while (!_quitting)
             {
-                hudContent.transform.localScale = new Vector3(0, 0, 0);
-                shownHud = false;
+                yield return new WaitForSeconds(.1f);
+                
+                if(!_qmReady || _hidden || _stayVisible || (_stayVisibleNotifier && _stayOnUntilClear.BoolValue)) continue;
+
+                var currentShowSeconds = DateTime.Now.Subtract(_lastEnabled).TotalSeconds;
+
+                if (currentShowSeconds < _timeout.FloatValue && (_messageTimer == 0f || currentShowSeconds < _messageTimer)) continue;
+
+                _hidden = true;
+                _messageTimer = 0f;
+                CohtmlHud.Instance.HideHud();
             }
         }
-
-        private int IterateAndAttachToChildren(GameObject parent)
+        
+        private void LateStartup(CVR_MenuManager obj)
         {
-            int childCount = 0;
+            if(IHEnable.BoolValue)
+                _ihCoroutineToken = MelonCoroutines.Start(ImmersiveHudCoroutine());
+            
+            if(_hasSetupUI) return;
+            _hasSetupUI = true;
+            
+            QuickMenuAPI.PrepareIcon("BTKStandalone", "BTKIcon", Assembly.GetExecutingAssembly().GetManifestResourceStream("BTKSANameplateMod.Images.BTKIcon.png"));
+            QuickMenuAPI.PrepareIcon("BTKStandalone", "Settings", Assembly.GetExecutingAssembly().GetManifestResourceStream("BTKSANameplateMod.Images.Settings.png"));
+            QuickMenuAPI.PrepareIcon("BTKStandalone", "TurnOff", Assembly.GetExecutingAssembly().GetManifestResourceStream("BTKSANameplateMod.Images.TurnOff.png"));
 
-            for (int i = 0; i < parent.transform.childCount; i++)
+            var rootPage = new Page("BTKStandalone", "MainPage", true, "BTKIcon");
+            rootPage.MenuTitle = "BTK Standalone Mods";
+            rootPage.MenuSubtitle = "Toggle and configure your BTK Standalone mods here!";
+
+            var functionToggles = rootPage.AddCategory("Immersive Hud");
+            
+            var settingsPage = functionToggles.AddPage("IH Settings", "Settings", "Change settings related to Immersive Hud", "BTKStandalone");
+
+            var configCategories = new Dictionary<string, Category>();
+            
+            foreach (var config in BTKConfigs)
             {
-                //Scan objects for non standards to attach
-                Transform child = parent.transform.GetChild(i);
-                childCount++;
+                if (!configCategories.ContainsKey(config.Category)) 
+                    configCategories.Add(config.Category, settingsPage.AddCategory(config.Category));
 
-                Log($"Child: {child.name}", true);
+                var cat = configCategories[config.Category];
 
-                //Patch to monitor the correct component for JoinNotifier
-                if (child.name.Equals("NotifyDot-join") || child.name.Equals("NotifyDot-leave"))
+                switch (config.Type)
                 {
-                    var gameObject = child.gameObject;
-                    MonitoredObject newHudItem = new MonitoredObject(gameObject, gameObject.activeSelf);
-                    newHudItem.TrackedComponent = child.GetComponent<Image>();
-                    customHudObjects.Add(newHudItem);
-                }
-                else if (child.name.Equals("NotifyDot-DownloadStatusProgress"))
-                {
-                    //Patch to keep hud active while WorldPreloader is downloading with it's UI element active
-                    HudEvent hudEvent = child.gameObject.AddComponent<HudEvent>();
-                    hudEvent.OnEnableListeners.Add(OnTrackedGameObjectEnable);
+                    case { } boolType when boolType == typeof(bool):
+                        ToggleButton toggle = null;
+                        var boolConfig = (BTKBoolConfig)config;
+                        toggle = cat.AddToggle(config.Name, config.Description, boolConfig.BoolValue);
+                        toggle.OnValueUpdated += b =>
+                        {
+                            if (!ConfigDialogs(config))
+                                toggle.ToggleValue = boolConfig.BoolValue;
 
-                    HUDEventComponents.Add(hudEvent);
+                            boolConfig.BoolValue = b;
+                        };
+                        break;
+                    case {} floatType when floatType == typeof(float):
+                        SliderFloat slider = null;
+                        var floatConfig = (BTKFloatConfig)config;
+                        slider = settingsPage.AddSlider(floatConfig.Name, floatConfig.Description, Convert.ToSingle(floatConfig.FloatValue), floatConfig.MinValue, floatConfig.MaxValue);
+                        slider.OnValueUpdated += f =>
+                        {
+                            if (!ConfigDialogs(config))
+                            {
+                                slider.SetSliderValue(floatConfig.FloatValue);
+                                return;
+                            }
 
-                    //Always set enableUntilClear
-                    hudEvent.enableUntilClear = true;
-                    hudEvent.OnDisableListeners.Add(OnTrackedGameObjectDisable);
-                }
-                else
-                {
-                    HudEvent hudEvent = child.gameObject.AddComponent<HudEvent>();
-                    hudEvent.OnEnableListeners.Add(OnTrackedGameObjectEnable);
+                            floatConfig.FloatValue = f;
 
-                    HUDEventComponents.Add(hudEvent);
-
-                    if (MelonPreferences.GetEntryValue<bool>(SettingsCategory, HUDStayOnUntilClear))
-                    {
-                        hudEvent.enableUntilClear = true;
-                        hudEvent.OnDisableListeners.Add(OnTrackedGameObjectDisable);
-                    }
+                        };
+                        break;
                 }
             }
-
-            return childCount;
         }
-
-        private void OnTrackedGameObjectEnable(bool enableUntilClear)
+        
+        private bool ConfigDialogs(IBTKBaseConfig config)
         {
-            ShowHud();
-            notificationIsActive = enableUntilClear;
+            if (config.DialogMessage != null)
+            {
+                QuickMenuAPI.ShowNotice("Notice", config.DialogMessage);
+            }
+
+            return true;
         }
-
-        private void OnTrackedGameObjectDisable()
-        {
-            //Reset hud timer before clearing notificationIsActive
-            ShowHud();
-            notificationIsActive = false;
-        }
-
-        private static void Log(string log, bool dbg = false)
-        {
-            if (!MelonDebug.IsEnabled() && dbg)
-                return;
-
-            MelonLogger.Msg(log);
-        }
-
     }
     
-    [HarmonyPatch]
-    class RoomManagerPatches
+    [HarmonyPatch(typeof(CohtmlHud))]
+    class HudPatches
     {
-        static IEnumerable<MethodBase> TargetMethods()
+        internal static Action OnHudReady;
+        
+        [HarmonyPatch(nameof(CohtmlHud.UpdateMicStatus))]
+        [HarmonyPatch(nameof(CohtmlHud.DisplayInteractableIndicator))]
+        [HarmonyPatch(nameof(CohtmlHud.SetDisplayChain))]
+        [HarmonyPostfix]
+        static void HudUpdated()
         {
-            return typeof(RoomManager).GetMethods(BindingFlags.Public | BindingFlags.Static).Where(x => x.Name.Contains("Method_Public_Static_Boolean_ApiWorld_ApiWorldInstance_") && !x.Name.Contains("PDM")).Cast<MethodBase>();
-        }
-
-        static void Postfix()
-        {
-            if (!BTKSAImmersiveHud.Instance.ScannedCustomHud)
+            if (BTKSAImmersiveHud.Instance == null || !BTKSAImmersiveHud.IHEnable.BoolValue) return;
+            try
             {
-                //World join start custom hud element scan
-                BTKSAImmersiveHud.Instance.ScannedCustomHud = true;
-                BTKSAImmersiveHud.Instance.PostWorldJoinChildScan();
-                BTKSAImmersiveHud.Instance.OnPreferencesSaved();
+                BTKSAImmersiveHud.Instance.HudUpdated();
+            }
+            catch (Exception e)
+            {
+                BTKSAImmersiveHud.Logger.Error(e);
             }
         }
-    }
 
-    //Monitored GameObject object
-    class MonitoredObject
-    {
-        private GameObject hudItem;
-        private bool lastKnownState;
-        //Patch to monitor JoinNotifier
-        public Image TrackedComponent;
-
-        public MonitoredObject(GameObject go, bool lastKnownState)
+        [HarmonyPatch(nameof(CohtmlHud.ViewDropText), typeof(string), typeof(string))]
+        [HarmonyPatch(nameof(CohtmlHud.ViewDropText), typeof(string), typeof(string), typeof(string))]
+        [HarmonyPostfix]
+        static void HudUpdatedMessageShort()
         {
-            this.hudItem = go;
-            this.lastKnownState = lastKnownState;
+            if (BTKSAImmersiveHud.Instance == null || !BTKSAImmersiveHud.IHEnable.BoolValue) return;
+            try
+            {
+                BTKSAImmersiveHud.Instance.HudUpdatedMessage(4f);
+            }
+            catch (Exception e)
+            {
+                BTKSAImmersiveHud.Logger.Error(e);
+            } 
+        }
+        
+        [HarmonyPatch(nameof(CohtmlHud.ViewDropTextImmediate))]
+        [HarmonyPostfix]
+        static void HudUpdatedMessageShortReset()
+        {
+            if (BTKSAImmersiveHud.Instance == null || !BTKSAImmersiveHud.IHEnable.BoolValue) return;
+            try
+            {
+                BTKSAImmersiveHud.Instance.HudUpdatedMessage(4f, true);
+            }
+            catch (Exception e)
+            {
+                BTKSAImmersiveHud.Logger.Error(e);
+            } 
+        }
+        
+        [HarmonyPatch(nameof(CohtmlHud.ViewDropTextLong))]
+        [HarmonyPostfix]
+        static void HudUpdatedMessageLong()
+        {
+            if (BTKSAImmersiveHud.Instance == null || !BTKSAImmersiveHud.IHEnable.BoolValue) return;
+            try
+            {
+                BTKSAImmersiveHud.Instance.HudUpdatedMessage(7f);
+            }
+            catch (Exception e)
+            {
+                BTKSAImmersiveHud.Logger.Error(e);
+            } 
+        }
+        
+        [HarmonyPatch(nameof(CohtmlHud.ViewDropTextLonger))]
+        [HarmonyPostfix]
+        static void HudUpdatedMessageLonger()
+        {
+            if (BTKSAImmersiveHud.Instance == null || !BTKSAImmersiveHud.IHEnable.BoolValue) return;
+            try
+            {
+                BTKSAImmersiveHud.Instance.HudUpdatedMessage(10f);
+            }
+            catch (Exception e)
+            {
+                BTKSAImmersiveHud.Logger.Error(e);
+            } 
         }
 
-        public bool CheckState()
+        [HarmonyPatch(nameof(CohtmlHud.SelectPropToSpawn))]
+        [HarmonyPostfix]
+        static void HudUpdatedPropSpawn()
         {
-            if (TrackedComponent == null) return false;
-            if (TrackedComponent.enabled == lastKnownState) return false;
-            lastKnownState = TrackedComponent.enabled;
-            return true;
+            if (BTKSAImmersiveHud.Instance == null || !BTKSAImmersiveHud.IHEnable.BoolValue) return;
+            try
+            {
+                BTKSAImmersiveHud.Instance.HudUpdatedPropSpawn(true);
+            }
+            catch (Exception e)
+            {
+                BTKSAImmersiveHud.Logger.Error(e);
+            }
+        }
 
+        [HarmonyPatch(nameof(CohtmlHud.ClearPropToSpawn))]
+        [HarmonyPostfix]
+        static void HudUpdatedPropSpawnHide()
+        {
+            if (BTKSAImmersiveHud.Instance == null || !BTKSAImmersiveHud.IHEnable.BoolValue) return;
+            try
+            {
+                BTKSAImmersiveHud.Instance.HudUpdatedPropSpawn(false);
+            }
+            catch (Exception e)
+            {
+                BTKSAImmersiveHud.Logger.Error(e);
+            }
+        }
+
+        [HarmonyPatch("UpdateNotifierStatus")]
+        [HarmonyPostfix]
+        static void NotifierUpdate()
+        {
+            try
+            {
+                if (ViewManager.Instance.FriendRequests.Count > 0 && MetaPort.Instance.settings.GetSettingsBool("HUDCustomizationFriendRequests", false))
+                {
+                    BTKSAImmersiveHud.Instance.HudUpdatedNotifier(true);
+                    return;
+                }
+                 
+                if ((ViewManager.Instance.Invites.Count > 0 || ViewManager.Instance.InviteRequests.Count > 0) && MetaPort.Instance.settings.GetSettingsBool("HUDCustomizationInvites", false))
+                {
+                    BTKSAImmersiveHud.Instance.HudUpdatedNotifier(true);
+                    return;
+                }
+                
+                if (ViewManager.Instance.allRunningVotes.Count > 0 && MetaPort.Instance.settings.GetSettingsBool("HUDCustomizationVotes", false))
+                {
+                    BTKSAImmersiveHud.Instance.HudUpdatedNotifier(true);
+                    return;
+                }
+                
+                BTKSAImmersiveHud.Instance.HudUpdatedNotifier(false);
+            }
+            catch (Exception e)
+            {
+                BTKSAImmersiveHud.Logger.Error(e);
+            }
+        }
+
+        [HarmonyPatch(nameof(CohtmlHud.markMenuAsReady))]
+        [HarmonyPostfix]
+        static void MarkMenuAsReady()
+        {
+            try
+            {
+                OnHudReady?.Invoke();
+            }
+            catch (Exception e)
+            {
+                BTKSAImmersiveHud.Logger.Error(e);
+            }
         }
     }
 }

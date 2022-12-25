@@ -1,22 +1,16 @@
-# THIS REPO IS NO LONGER SUPPORTED, VRCHAT'S DECISION TO ADOPT EASY ANTI CHEAT HAS KILLED ANY DESIRE TO CONTINUE.
-# UNLESS THIS DECISION IS REVERSED THIS REPO WILL REMAIN ARCHIVED.
+# BTKSAImmersiveHud For ChilloutVR
+Immersive Hud mod for ChilloutVR, only displays the hud when notifications come in or a state changes (Mic mute/unmute, hud message, prop spawning, etc).
 
-# BTKSAImmersiveHud
-Immersive Hud mod for VRChat, only displays the hud when notifications come in or a state changes (Mic mute/unmute, Gesture lock).
-
-The mod also now supports enabling UI if the VRCUiManager Hud Text fires, or when WorldPreloader is displaying it's UI element.
-
-You can configure the duration that the hud stays visible, and disable the entire mod, from [UIExpanionKit](https://github.com/knah/VRCMods)
+This mod requires [BTKUILib](https://github.com/BTK-Development/BTKUILib) or it will not work at all.
 
 ## Install/Usage
-Install [MelonLoader](https://github.com/HerpDerpinstine/MelonLoader) version 0.2.7.x or higher.
+Install [MelonLoader](https://github.com/HerpDerpinstine/MelonLoader) version 0.5.7 or higher, this is required as the mod has been updated specifically for 0.5.7!
 
-Download the latest release from [Releases](https://github.com/ddakebono/BTKSAGestureMod/releases) and place in your VRChat\Mods folder.
+Download the latest release from [Releases](https://github.com/ddakebono/BTKSAGestureMod/releases) and place in your ChilloutVR/Mods folder!
 
 ## Disclamer
-**Warning:** The VRChat team is not very keen on modding or reverse engineering the game, while the mod does not include anything that would ruin the fun for others, using it may still be a bannable offence.
-
-**USE IT AT YOUR OWN RISK**, I am not responsible for any bans or any punishments you may get by using this mod!
+### BTKUILib is not made by or affiliated with Alpha Blend Interactive
 
 ## Credits
 * [HerpDerpinstine/MelonLoader](https://github.com/HerpDerpinstine/MelonLoader)
+* [ChilloutVR](https://store.steampowered.com/app/661130/ChilloutVR/)
