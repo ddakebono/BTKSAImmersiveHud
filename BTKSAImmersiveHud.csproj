@@ -82,8 +82,8 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="Images\BTKIcon.png" />
-    <Content Include="Images\Settings.png" />
+    <EmbeddedResource Include="Images\BTKIcon.png" />
+    <EmbeddedResource Include="Images\Settings.png" />
     <Content Include="README.md" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
