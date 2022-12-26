@@ -22,7 +22,7 @@ namespace BTKSAImmersiveHud
         public const string Name = "BTKSAImmersiveHud";
         public const string Author = "DDAkebono#0001";
         public const string Company = "BTK-Development";
-        public const string Version = "2.0.0";
+        public const string Version = "2.0.1";
         public const string DownloadLink = "https://github.com/ddakebono/BTKSAImmersiveHud/releases";
     }
 
@@ -50,11 +50,9 @@ namespace BTKSAImmersiveHud
 
         public override void OnInitializeMelon()
         {
-            MelonLogger.Msg("BTK Standalone: Immersive Hud - Starting Up");
-
             Logger = LoggerInstance;
 
-            Logger.Msg("BTK Standalone: Self Portrait - Starting Up");
+            Logger.Msg("BTK Standalone: Immersive Hud - Starting Up");
 
             if (RegisteredMelons.Any(x => x.Info.Name.Equals("BTKCompanionLoader", StringComparison.OrdinalIgnoreCase)))
             {
@@ -176,9 +174,8 @@ namespace BTKSAImmersiveHud
             if(_hasSetupUI) return;
             _hasSetupUI = true;
             
-            QuickMenuAPI.PrepareIcon("BTKStandalone", "BTKIcon", Assembly.GetExecutingAssembly().GetManifestResourceStream("BTKSANameplateMod.Images.BTKIcon.png"));
-            QuickMenuAPI.PrepareIcon("BTKStandalone", "Settings", Assembly.GetExecutingAssembly().GetManifestResourceStream("BTKSANameplateMod.Images.Settings.png"));
-            QuickMenuAPI.PrepareIcon("BTKStandalone", "TurnOff", Assembly.GetExecutingAssembly().GetManifestResourceStream("BTKSANameplateMod.Images.TurnOff.png"));
+            QuickMenuAPI.PrepareIcon("BTKStandalone", "BTKIcon", Assembly.GetExecutingAssembly().GetManifestResourceStream("BTKSAImmersiveHud.Images.BTKIcon.png"));
+            QuickMenuAPI.PrepareIcon("BTKStandalone", "Settings", Assembly.GetExecutingAssembly().GetManifestResourceStream("BTKSAImmersiveHud.Images.Settings.png"));
 
             var rootPage = new Page("BTKStandalone", "MainPage", true, "BTKIcon");
             rootPage.MenuTitle = "BTK Standalone Mods";
