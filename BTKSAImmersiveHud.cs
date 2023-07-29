@@ -35,6 +35,7 @@ namespace BTKSAImmersiveHud
 
         internal static BTKBoolConfig IHEnable = new(nameof(BTKSAImmersiveHud), "Enable Immersive Hud", "Enables/Disables Immersive Hud's functionality", false, null, false);
         private BTKBoolConfig _stayOnUntilClear = new(nameof(BTKSAImmersiveHud), "Stay On Until Clear", "Keeps the hud visible until all notifications are cleared", false, null, false);
+        private BTKBoolConfig _ignoreDesktopReticle = new(nameof(BTKSAImmersiveHud), "Ignore Desktop Reticle", "Keeps the Desktop Reticle visible when hiding the Hud", false, null, false);
         private BTKFloatConfig _timeout = new(nameof(BTKSAImmersiveHud), "Hud Timeout", "How long before the hud is hidden again (In seconds)", 10f, 0f, 60f, null, false);
 
         private DateTime _lastEnabled = DateTime.Now;
@@ -162,7 +163,9 @@ namespace BTKSAImmersiveHud
 
                 _hidden = true;
                 _messageTimer = 0f;
+                var currentDesktopPointerState = CohtmlHud.Instance.desktopPointer.activeSelf;
                 CohtmlHud.Instance.HideHud();
+                if (_ignoreDesktopReticle.BoolValue) CohtmlHud.Instance.desktopPointer.SetActive(currentDesktopPointerState);
             }
         }
         
