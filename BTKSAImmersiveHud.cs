@@ -85,6 +85,11 @@ namespace BTKSAImmersiveHud
                 
                 ShowHud();
             };
+
+            _ignoreDesktopReticle.OnConfigUpdated += b =>
+            {
+                ShowHud();
+            };
             
             QuickMenuAPI.OnMenuRegenerate += LateStartup;
         }
