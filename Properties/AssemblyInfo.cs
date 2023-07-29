@@ -37,6 +37,6 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyFileVersion("2.0.1.0")]
 [assembly: MelonInfo(typeof(BTKSAImmersiveHud.BTKSAImmersiveHud), BTKSAImmersiveHud.BuildInfo.Name, BTKSAImmersiveHud.BuildInfo.Version, BTKSAImmersiveHud.BuildInfo.Author, BTKSAImmersiveHud.BuildInfo.DownloadLink)]
 [assembly: MelonGame("Alpha Blend Interactive", "ChilloutVR")]
-[assembly: MelonColor(ConsoleColor.DarkMagenta)]
-[assembly: MelonAuthorColor(ConsoleColor.DarkMagenta)]
+[assembly: MelonColor(255, 139,0,139)]
+[assembly: MelonAuthorColor(255, 139,0,139)]
 [assembly: HarmonyDontPatchAll]
