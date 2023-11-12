@@ -132,7 +132,9 @@ namespace BTKSAImmersiveHud
         private void ShowHud()
         {
             _lastEnabled = DateTime.Now;
-            CohtmlHud.Instance.RestoreHud();
+            // _renderMaterial is initialized in Start and is used in ShowHud which is used in RestoreHud
+            if (CohtmlHud.Instance != null && CohtmlHud.Instance._renderMaterial != null)
+                CohtmlHud.Instance.RestoreHud();
             _hidden = false;
         }
         
