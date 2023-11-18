@@ -35,7 +35,7 @@ namespace BTKSAImmersiveHud
 
         internal static BTKBoolConfig IHEnable = new(nameof(BTKSAImmersiveHud), "Enable Immersive Hud", "Enables/Disables Immersive Hud's functionality", false, null, false);
         private BTKBoolConfig _stayOnUntilClear = new(nameof(BTKSAImmersiveHud), "Stay On Until Clear", "Keeps the hud visible until all notifications are cleared", false, null, false);
-        private BTKBoolConfig _ignoreDesktopReticle = new(nameof(BTKSAImmersiveHud), "Ignore Desktop Reticle", "Keeps the Desktop Reticle visible when hiding the Hud", false, null, false);
+        internal static BTKBoolConfig IgnoreDesktopReticle = new(nameof(BTKSAImmersiveHud), "Ignore Desktop Reticle", "Keeps the Desktop Reticle visible when hiding the Hud", false, null, false);
         private BTKFloatConfig _timeout = new(nameof(BTKSAImmersiveHud), "Hud Timeout", "How long before the hud is hidden again (In seconds)", 10f, 0f, 60f, null, false);
 
         private DateTime _lastEnabled = DateTime.Now;
@@ -86,7 +86,7 @@ namespace BTKSAImmersiveHud
                 ShowHud();
             };
 
-            _ignoreDesktopReticle.OnConfigUpdated += b =>
+            IgnoreDesktopReticle.OnConfigUpdated += b =>
             {
                 ShowHud();
             };
@@ -132,7 +132,9 @@ namespace BTKSAImmersiveHud
         private void ShowHud()
         {
             _lastEnabled = DateTime.Now;
-            CohtmlHud.Instance.RestoreHud();
+            // _renderMaterial is initialized in Start and is used in ShowHud which is used in RestoreHud
+            if (CohtmlHud.Instance != null && CohtmlHud.Instance._renderMaterial != null)
+                CohtmlHud.Instance.RestoreHud();
             _hidden = false;
         }
         
@@ -168,9 +170,7 @@ namespace BTKSAImmersiveHud
 
                 _hidden = true;
                 _messageTimer = 0f;
-                var currentDesktopPointerState = CohtmlHud.Instance.desktopPointer.activeSelf;
                 CohtmlHud.Instance.HideHud();
-                if (_ignoreDesktopReticle.BoolValue) CohtmlHud.Instance.desktopPointer.SetActive(currentDesktopPointerState);
             }
         }
         
@@ -399,6 +399,21 @@ namespace BTKSAImmersiveHud
             try
             {
                 OnHudReady?.Invoke();
+            }
+            catch (Exception e)
+            {
+                BTKSAImmersiveHud.Logger.Error(e);
+            }
+        }
+
+        [HarmonyPatch(nameof(CohtmlHud.Update))]
+        [HarmonyPostfix]
+        static void UpdateDesktopReticle(CohtmlHud __instance)
+        {
+            try {
+                var showReticleMenuClosed = __instance._isHudShown || BTKSAImmersiveHud.IgnoreDesktopReticle.BoolValue;
+                var showReticle = ViewManager.Instance.isGameMenuOpen() ? !Cursor.visible : showReticleMenuClosed;
+                __instance.desktopPointer.SetActive(showReticle);
             }
             catch (Exception e)
             {
