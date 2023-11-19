@@ -22,7 +22,7 @@ namespace BTKSAImmersiveHud
         public const string Name = "BTKSAImmersiveHud";
         public const string Author = "DDAkebono#0001";
         public const string Company = "BTK-Development";
-        public const string Version = "2.0.3";
+        public const string Version = "2.0.4";
         public const string DownloadLink = "https://github.com/ddakebono/BTKSAImmersiveHud/releases";
     }
 
@@ -37,6 +37,10 @@ namespace BTKSAImmersiveHud
         private BTKBoolConfig _stayOnUntilClear = new(nameof(BTKSAImmersiveHud), "Stay On Until Clear", "Keeps the hud visible until all notifications are cleared", false, null, false);
         internal static BTKBoolConfig IgnoreDesktopReticle = new(nameof(BTKSAImmersiveHud), "Ignore Desktop Reticle", "Keeps the Desktop Reticle visible when hiding the Hud", false, null, false);
         private BTKFloatConfig _timeout = new(nameof(BTKSAImmersiveHud), "Hud Timeout", "How long before the hud is hidden again (In seconds)", 10f, 0f, 60f, null, false);
+
+        private static FieldInfo _hudShown = typeof(CohtmlHud).GetField("_isHudShown", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static FieldInfo _renderMat = typeof(CohtmlHud).GetField("_renderMaterial", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static MethodInfo _btkGetCreatePageAdapter;
 
         private DateTime _lastEnabled = DateTime.Now;
         private bool _qmReady;
@@ -71,10 +75,17 @@ namespace BTKSAImmersiveHud
 
             Instance = this;
 
+            if (RegisteredMelons.Any(x => x.Info.Name.Equals("BTKUILib") && x.Info.SemanticVersion.CompareTo(new SemVersion(2, 0, 0)) <= 0))
+            {
+                //We're working with UILib 2.0.0, let's reflect the get create page function
+                _btkGetCreatePageAdapter = typeof(Page).GetMethod("GetOrCreatePage", BindingFlags.Public | BindingFlags.Static);
+                Logger.Msg($"BTKUILib 2.0.0 detected, attempting to grab GetOrCreatePage function: {_btkGetCreatePageAdapter != null}");
+            }
+
             //Apply patches
             ApplyPatches(typeof(HudPatches));
             
-            HudPatches.OnHudReady += OnQMMarkAsReady;
+            QuickMenuAPI.OnMenuRegenerate += OnQMMarkAsReady;
 
             IHEnable.OnConfigUpdated += o =>
             {
@@ -133,12 +144,12 @@ namespace BTKSAImmersiveHud
         {
             _lastEnabled = DateTime.Now;
             // _renderMaterial is initialized in Start and is used in ShowHud which is used in RestoreHud
-            if (CohtmlHud.Instance != null && CohtmlHud.Instance._renderMaterial != null)
+            if (CohtmlHud.Instance != null && GetHudRenderMat() != null)
                 CohtmlHud.Instance.RestoreHud();
             _hidden = false;
         }
         
-        private void OnQMMarkAsReady()
+        private void OnQMMarkAsReady(CVR_MenuManager obj)
         {
             _qmReady = true;
         }
@@ -185,7 +196,13 @@ namespace BTKSAImmersiveHud
             QuickMenuAPI.PrepareIcon("BTKStandalone", "BTKIcon", Assembly.GetExecutingAssembly().GetManifestResourceStream("BTKSAImmersiveHud.Images.BTKIcon.png"));
             QuickMenuAPI.PrepareIcon("BTKStandalone", "Settings", Assembly.GetExecutingAssembly().GetManifestResourceStream("BTKSAImmersiveHud.Images.Settings.png"));
 
-            var rootPage = new Page("BTKStandalone", "MainPage", true, "BTKIcon");
+            Page rootPage;
+
+            if (_btkGetCreatePageAdapter != null)
+                rootPage = (Page)_btkGetCreatePageAdapter.Invoke(null, new object[] { "BTKStandalone", "MainPage", true, "BTKIcon", null, false });
+            else
+                rootPage = new Page("BTKStandalone", "MainPage", true, "BTKIcon");
+
             rootPage.MenuTitle = "BTK Standalone Mods";
             rootPage.MenuSubtitle = "Toggle and configure your BTK Standalone mods here!";
 
@@ -245,13 +262,21 @@ namespace BTKSAImmersiveHud
 
             return true;
         }
+
+        public static bool GetIsHudShownState()
+        {
+            return (bool)_hudShown.GetValue(CohtmlHud.Instance);
+        }
+
+        public static Material GetHudRenderMat()
+        {
+            return (Material)_renderMat.GetValue(CohtmlHud.Instance);
+        }
     }
     
     [HarmonyPatch(typeof(CohtmlHud))]
     class HudPatches
     {
-        internal static Action OnHudReady;
-        
         [HarmonyPatch(nameof(CohtmlHud.UpdateMicStatus))]
         [HarmonyPatch(nameof(CohtmlHud.DisplayInteractableIndicator))]
         [HarmonyPatch(nameof(CohtmlHud.SetDisplayChain))]
@@ -392,26 +417,12 @@ namespace BTKSAImmersiveHud
             }
         }
 
-        [HarmonyPatch(nameof(CohtmlHud.markMenuAsReady))]
-        [HarmonyPostfix]
-        static void MarkMenuAsReady()
-        {
-            try
-            {
-                OnHudReady?.Invoke();
-            }
-            catch (Exception e)
-            {
-                BTKSAImmersiveHud.Logger.Error(e);
-            }
-        }
-
         [HarmonyPatch(nameof(CohtmlHud.Update))]
         [HarmonyPostfix]
         static void UpdateDesktopReticle(CohtmlHud __instance)
         {
             try {
-                var showReticleMenuClosed = __instance._isHudShown || BTKSAImmersiveHud.IgnoreDesktopReticle.BoolValue;
+                var showReticleMenuClosed = BTKSAImmersiveHud.GetIsHudShownState() || BTKSAImmersiveHud.IgnoreDesktopReticle.BoolValue;
                 var showReticle = ViewManager.Instance.isGameMenuOpen() ? !Cursor.visible : showReticleMenuClosed;
                 __instance.desktopPointer.SetActive(showReticle);
             }
